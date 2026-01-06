@@ -5,6 +5,7 @@ const cors = require('cors');
 const authRoutes = require('./routes/auth');
 const billsRoutes = require('./routes/bills');
 const smsRoutes = require('./routes/sms');
+const otpRoutes = require('./routes/otp');
 const { authMiddleware } = require('./middleware/auth');
 
 const app = express();
@@ -21,6 +22,7 @@ app.get('/api/health', (req, res) => {
 
 // Public routes
 app.use('/api', authRoutes);
+app.use('/api/otp', otpRoutes);
 
 // Protected routes
 app.use('/api/bills', authMiddleware, billsRoutes);
