@@ -28,12 +28,30 @@ router.post('/request', async (req, res) => {
             return res.status(404).json({ error: 'Phone number not registered' });
         }
 
+        // Rate limiting: Check if OTP was requested within last 2 minutes
+        const [recentOtp] = await db.query(
+            `SELECT created_at FROM otp_codes 
+       WHERE phone = ? AND created_at > DATE_SUB(NOW(), INTERVAL 2 MINUTE)
+       ORDER BY created_at DESC LIMIT 1`,
+            [phone]
+        );
+
+        if (recentOtp.length > 0) {
+            const waitSeconds = Math.ceil(
+                (new Date(recentOtp[0].created_at).getTime() + 2 * 60 * 1000 - Date.now()) / 1000
+            );
+            return res.status(429).json({
+                error: `Vui lòng đợi ${waitSeconds} giây trước khi yêu cầu lại`,
+                retryAfter: waitSeconds,
+            });
+        }
+
         // Generate OTP
         const otp = generateOTP();
         const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
 
-        // Delete old OTPs for this phone
-        await db.query('DELETE FROM otp_codes WHERE phone = ?', [phone]);
+        // Delete old OTPs for this phone (keep rate limit check working)
+        await db.query('DELETE FROM otp_codes WHERE phone = ? AND used = TRUE', [phone]);
 
         // Save OTP
         await db.query(
