@@ -6,7 +6,7 @@ const { adminMiddleware } = require('../middleware/auth');
 // GET /api/sms/pending - Get one pending SMS (for Admin SMS Worker)
 router.get('/pending', adminMiddleware, async (req, res) => {
     try {
-        // Get one pending SMS and lock it
+        // Get one pending SMS
         const [jobs] = await db.query(
             'SELECT * FROM sms_queue WHERE status = ? ORDER BY created_at ASC LIMIT 1',
             ['pending']
@@ -17,6 +17,12 @@ router.get('/pending', adminMiddleware, async (req, res) => {
         }
 
         const job = jobs[0];
+
+        // IMPORTANT: Mark as 'processing' immediately to prevent duplicate sends
+        await db.query(
+            'UPDATE sms_queue SET status = ? WHERE id = ? AND status = ?',
+            ['processing', job.id, 'pending']
+        );
 
         res.json({
             id: job.id,
@@ -100,6 +106,27 @@ router.post('/create', adminMiddleware, async (req, res) => {
         });
     } catch (err) {
         console.error('SMS create error:', err);
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
+// POST /api/sms/reset-stuck - Reset stuck 'processing' SMS back to 'pending'
+// Call this if app crashed while processing
+router.post('/reset-stuck', adminMiddleware, async (req, res) => {
+    try {
+        // Reset SMS stuck in 'processing' for more than 2 minutes
+        const [result] = await db.query(
+            `UPDATE sms_queue SET status = 'pending' 
+       WHERE status = 'processing' 
+       AND created_at < DATE_SUB(NOW(), INTERVAL 2 MINUTE)`
+        );
+
+        res.json({
+            message: 'Reset complete',
+            affected: result.affectedRows,
+        });
+    } catch (err) {
+        console.error('Reset stuck error:', err);
         res.status(500).json({ error: 'Server error' });
     }
 });
