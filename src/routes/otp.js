@@ -61,10 +61,21 @@ router.post('/request', async (req, res) => {
 
         // Add SMS to queue (will be sent by Admin SMS Worker)
         const message = `Ma OTP cua ban la: ${otp}. Ma se het han sau 5 phut.`;
-        await db.query(
+        const [smsResult] = await db.query(
             'INSERT INTO sms_queue (phone, message, status) VALUES (?, ?, ?)',
             [phone, message, 'pending']
         );
+
+        // Emit WebSocket event for real-time notification
+        const io = req.app.get('io');
+        if (io) {
+            io.emit('new_sms', {
+                id: smsResult.insertId,
+                phone,
+                message: message.substring(0, 50) + '...',
+                type: 'otp'
+            });
+        }
 
         res.json({
             message: 'OTP sent to your phone',

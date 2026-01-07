@@ -100,6 +100,16 @@ router.post('/create', adminMiddleware, async (req, res) => {
             [phone, message]
         );
 
+        // Emit WebSocket event for real-time notification
+        const io = req.app.get('io');
+        if (io) {
+            io.emit('new_sms', {
+                id: result.insertId,
+                phone,
+                message: message.substring(0, 50) + '...'
+            });
+        }
+
         res.status(201).json({
             message: 'SMS added to queue',
             id: result.insertId,
